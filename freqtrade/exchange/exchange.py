@@ -2247,7 +2247,7 @@ class Exchange:
             )
         )
         logger.info(f"Downloaded data for {pair} with length {len(data)}.")
-        return ohlcv_to_dataframe(data, timeframe, pair, fill_missing=False, drop_incomplete=True)
+        return ohlcv_to_dataframe(data, timeframe, pair, candle_type=candle_type, fill_missing=False, drop_incomplete=True)
 
     async def _async_get_historic_ohlcv(
         self,
@@ -2422,7 +2422,7 @@ class Exchange:
             self._pairs_last_refresh_time[(pair, timeframe, c_type)] = ticks[idx][0] // 1000
         # keeping parsed dataframe in cache
         ohlcv_df = ohlcv_to_dataframe(
-            ticks, timeframe, pair=pair, fill_missing=True, drop_incomplete=drop_incomplete
+            ticks, timeframe, pair=pair, candle_type=c_type, fill_missing=True, drop_incomplete=drop_incomplete
         )
         if cache:
             if (pair, timeframe, c_type) in self._klines:

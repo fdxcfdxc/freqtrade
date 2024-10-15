@@ -4,7 +4,7 @@ from typing import Optional
 from pandas import DataFrame, read_parquet, to_datetime
 
 from freqtrade.configuration import TimeRange
-from freqtrade.constants import DEFAULT_DATAFRAME_COLUMNS, DEFAULT_TRADES_COLUMNS
+from freqtrade.constants import DEFAULT_DATAFRAME_COLUMNS, DEFUALT_FUNDING_RATE_COLUMNS, DEFAULT_TRADES_COLUMNS
 from freqtrade.enums import CandleType, TradingMode
 
 from .idatahandler import IDataHandler
@@ -29,6 +29,10 @@ class ParquetDataHandler(IDataHandler):
         :param candle_type: Any of the enum CandleType (must match trading mode!)
         :return: None
         """
+        if candle_type == CandleType.FUNDING_RATE:
+            self._columns = DEFUALT_FUNDING_RATE_COLUMNS
+        else:
+            self._columns = DEFAULT_DATAFRAME_COLUMNS
         filename = self._pair_data_filename(self._datadir, pair, timeframe, candle_type)
         self.create_dir_if_needed(filename)
 
@@ -49,6 +53,10 @@ class ParquetDataHandler(IDataHandler):
         :param candle_type: Any of the enum CandleType (must match trading mode!)
         :return: DataFrame with ohlcv data, or empty DataFrame
         """
+        if candle_type == CandleType.FUNDING_RATE:
+            self._columns = DEFUALT_FUNDING_RATE_COLUMNS
+        else:
+            self._columns = DEFAULT_DATAFRAME_COLUMNS
         filename = self._pair_data_filename(self._datadir, pair, timeframe, candle_type=candle_type)
         if not filename.exists():
             # Fallback mode for 1M files
@@ -60,15 +68,26 @@ class ParquetDataHandler(IDataHandler):
 
         pairdata = read_parquet(filename)
         pairdata.columns = self._columns
-        pairdata = pairdata.astype(
-            dtype={
+        if candle_type == CandleType.FUNDING_RATE:
+            pairdata = pairdata.astype(dtype={
                 "open": "float",
                 "high": "float",
                 "low": "float",
                 "close": "float",
                 "volume": "float",
-            }
-        )
+            })
+        else:
+            pairdata = pairdata.astype(dtype={
+                "open": "float",
+                "high": "float",
+                "low": "float",
+                "close": "float",
+                "volume": "float",
+                "turnover": "float",
+                "trade_counts": "int",
+                "taker_volume": "float",
+                "taker_turnover": "float",
+            })
         pairdata["date"] = to_datetime(pairdata["date"], unit="ms", utc=True)
         return pairdata
 

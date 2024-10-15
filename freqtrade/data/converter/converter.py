@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, to_datetime
 
-from freqtrade.constants import DEFAULT_DATAFRAME_COLUMNS, Config
+from freqtrade.constants import DEFAULT_DATAFRAME_COLUMNS, DEFUALT_FUNDING_RATE_COLUMNS, Config
 from freqtrade.enums import CandleType, TradingMode
 
 
@@ -19,6 +19,7 @@ def ohlcv_to_dataframe(
     ohlcv: list,
     timeframe: str,
     pair: str,
+    candle_type: CandleType,
     *,
     fill_missing: bool = True,
     drop_incomplete: bool = True,
@@ -35,7 +36,10 @@ def ohlcv_to_dataframe(
     :return: DataFrame
     """
     logger.debug(f"Converting candle (OHLCV) data to dataframe for pair {pair}.")
-    cols = DEFAULT_DATAFRAME_COLUMNS
+    if candle_type == CandleType.FUNDING_RATE:
+        cols = DEFUALT_FUNDING_RATE_COLUMNS
+    else:
+        cols = DEFAULT_DATAFRAME_COLUMNS
     df = DataFrame(ohlcv, columns=cols)
 
     df["date"] = to_datetime(df["date"], unit="ms", utc=True)
@@ -43,15 +47,26 @@ def ohlcv_to_dataframe(
     # Some exchanges return int values for Volume and even for OHLC.
     # Convert them since TA-LIB indicators used in the strategy assume floats
     # and fail with exception...
-    df = df.astype(
-        dtype={
+    if candle_type == CandleType.FUNDING_RATE:
+        df = df.astype(dtype={
             "open": "float",
             "high": "float",
             "low": "float",
             "close": "float",
             "volume": "float",
-        }
-    )
+        })
+    else:
+        df = df.astype(dtype={
+            "open": "float",
+            "high": "float",
+            "low": "float",
+            "close": "float",
+            "volume": "float",
+            "turnover": "float",
+            "trade_counts": "int",
+            "taker_volume": "float",
+            "taker_turnover": "float",
+        })
     return clean_ohlcv_dataframe(
         df, timeframe, pair, fill_missing=fill_missing, drop_incomplete=drop_incomplete
     )
@@ -74,15 +89,26 @@ def clean_ohlcv_dataframe(
     :return: DataFrame
     """
     # group by index and aggregate results to eliminate duplicate ticks
-    data = data.groupby(by="date", as_index=False, sort=True).agg(
-        {
+    try:
+        data = data.groupby(by="date", as_index=False, sort=True).agg({
             "open": "first",
             "high": "max",
             "low": "min",
             "close": "last",
             "volume": "max",
-        }
-    )
+            "turnover": "max",
+            "trade_counts": "max",
+            "taker_volume": "max",
+            "taker_turnover": "max",
+        })
+    except:
+        data = data.groupby(by="date", as_index=False, sort=True).agg({
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "max",
+        })
     # eliminate partial candle
     if drop_incomplete:
         data.drop(data.tail(1).index, inplace=True)
@@ -102,11 +128,29 @@ def ohlcv_fill_up_missing_data(dataframe: DataFrame, timeframe: str, pair: str) 
     """
     from freqtrade.exchange import timeframe_to_resample_freq
 
-    ohlcv_dict = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    # ohlcv_dict = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
     resample_interval = timeframe_to_resample_freq(timeframe)
     # Resample to create "NAN" values
-    df = dataframe.resample(resample_interval, on="date").agg(ohlcv_dict)
-
+    try:
+        df = dataframe.resample(resample_interval, on="date").agg({
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+            "turnover": "sum",
+            "trade_counts": "sum",
+            "taker_volume": "sum",
+            "taker_turnover": "sum",
+        })
+    except:
+        df = dataframe.resample(resample_interval, on="date").agg({
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        })
     # Forwardfill close for missing columns
     df["close"] = df["close"].ffill()
     # Use close for "open, high, low"
@@ -288,7 +332,7 @@ def reduce_dataframe_footprint(df: DataFrame) -> DataFrame:
 
     df_dtypes = df.dtypes
     for column, dtype in df_dtypes.items():
-        if column in ["open", "high", "low", "close", "volume"]:
+        if column in DEFAULT_DATAFRAME_COLUMNS:
             continue
         if dtype == np.float64:
             df_dtypes[column] = np.float32

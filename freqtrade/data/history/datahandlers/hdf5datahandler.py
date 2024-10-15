@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from freqtrade.configuration import TimeRange
-from freqtrade.constants import DEFAULT_DATAFRAME_COLUMNS, DEFAULT_TRADES_COLUMNS
+from freqtrade.constants import DEFAULT_DATAFRAME_COLUMNS, DEFUALT_FUNDING_RATE_COLUMNS, DEFAULT_TRADES_COLUMNS
 from freqtrade.enums import CandleType, TradingMode
 
 from .idatahandler import IDataHandler
@@ -28,6 +28,10 @@ class HDF5DataHandler(IDataHandler):
         :param candle_type: Any of the enum CandleType (must match trading mode!)
         :return: None
         """
+        if candle_type == CandleType.FUNDING_RATE:
+            self._columns = DEFUALT_FUNDING_RATE_COLUMNS
+        else:
+            self._columns = DEFAULT_DATAFRAME_COLUMNS
         key = self._pair_ohlcv_key(pair, timeframe)
         _data = data.copy()
 
@@ -59,6 +63,10 @@ class HDF5DataHandler(IDataHandler):
         :param candle_type: Any of the enum CandleType (must match trading mode!)
         :return: DataFrame with ohlcv data, or empty DataFrame
         """
+        if candle_type == CandleType.FUNDING_RATE:
+            self._columns = DEFUALT_FUNDING_RATE_COLUMNS
+        else:
+            self._columns = DEFAULT_DATAFRAME_COLUMNS
         key = self._pair_ohlcv_key(pair, timeframe)
         filename = self._pair_data_filename(self._datadir, pair, timeframe, candle_type=candle_type)
 
@@ -80,15 +88,26 @@ class HDF5DataHandler(IDataHandler):
 
         if list(pairdata.columns) != self._columns:
             raise ValueError("Wrong dataframe format")
-        pairdata = pairdata.astype(
-            dtype={
+        if candle_type == CandleType.FUNDING_RATE:
+            pairdata = pairdata.astype(dtype={
                 "open": "float",
                 "high": "float",
                 "low": "float",
                 "close": "float",
                 "volume": "float",
-            }
-        )
+            })
+        else:
+            pairdata = pairdata.astype(dtype={
+                "open": "float",
+                "high": "float",
+                "low": "float",
+                "close": "float",
+                "volume": "float",
+                "turnover": "float",
+                "trade_counts": "int",
+                "taker_volume": "float",
+                "taker_turnover": "float",
+            })
         pairdata = pairdata.reset_index(drop=True)
         return pairdata
 

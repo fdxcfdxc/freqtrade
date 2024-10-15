@@ -6,7 +6,7 @@ from pandas import DataFrame, read_json, to_datetime
 
 from freqtrade import misc
 from freqtrade.configuration import TimeRange
-from freqtrade.constants import DEFAULT_DATAFRAME_COLUMNS, DEFAULT_TRADES_COLUMNS
+from freqtrade.constants import DEFAULT_DATAFRAME_COLUMNS, DEFUALT_FUNDING_RATE_COLUMNS, DEFAULT_TRADES_COLUMNS
 from freqtrade.data.converter import trades_dict_to_list, trades_list_to_df
 from freqtrade.enums import CandleType, TradingMode
 
@@ -33,6 +33,10 @@ class JsonDataHandler(IDataHandler):
         :param candle_type: Any of the enum CandleType (must match trading mode!)
         :return: None
         """
+        if candle_type == CandleType.FUNDING_RATE:
+            self._columns = DEFUALT_FUNDING_RATE_COLUMNS
+        else:
+            self._columns = DEFAULT_DATAFRAME_COLUMNS
         filename = self._pair_data_filename(self._datadir, pair, timeframe, candle_type)
         self.create_dir_if_needed(filename)
         _data = data.copy()
@@ -59,6 +63,10 @@ class JsonDataHandler(IDataHandler):
         :param candle_type: Any of the enum CandleType (must match trading mode!)
         :return: DataFrame with ohlcv data, or empty DataFrame
         """
+        if candle_type == CandleType.FUNDING_RATE:
+            self._columns = DEFUALT_FUNDING_RATE_COLUMNS
+        else:
+            self._columns = DEFAULT_DATAFRAME_COLUMNS
         filename = self._pair_data_filename(self._datadir, pair, timeframe, candle_type=candle_type)
         if not filename.exists():
             # Fallback mode for 1M files
@@ -73,15 +81,26 @@ class JsonDataHandler(IDataHandler):
         except ValueError:
             logger.error(f"Could not load data for {pair}.")
             return DataFrame(columns=self._columns)
-        pairdata = pairdata.astype(
-            dtype={
+        if candle_type == CandleType.FUNDING_RATE:
+            pairdata = pairdata.astype(dtype={
                 "open": "float",
                 "high": "float",
                 "low": "float",
                 "close": "float",
                 "volume": "float",
-            }
-        )
+            })
+        else:
+            pairdata = pairdata.astype(dtype={
+                "open": "float",
+                "high": "float",
+                "low": "float",
+                "close": "float",
+                "volume": "float",
+                "turnover": "float",
+                "trade_counts": "int",
+                "taker_volume": "float",
+                "taker_turnover": "float",
+            })
         pairdata["date"] = to_datetime(pairdata["date"], unit="ms", utc=True)
         return pairdata
 
